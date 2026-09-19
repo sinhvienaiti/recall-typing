@@ -364,9 +364,15 @@ function startRun(): void {
   if (resultDialog.open) resultDialog.close();
   stopSpeech();
   clearTransitionTimer();
+  slots.classList.remove("word-complete", "wrong-pulse");
   session = buildRecallSession(vocabulary, settings.targetCount, settings.shuffle);
   if (session.length === 0) {
+    currentIndex = 0;
     running = false;
+    transitioning = false;
+    renderHint();
+    renderSlots();
+    updateStats();
     setFeedback("Add at least one valid English/Vietnamese vocabulary entry first.", "error");
     return;
   }
@@ -656,23 +662,35 @@ byId<HTMLInputElement>("importBackup").addEventListener("change", async (event) 
 
   try {
     const data = JSON.parse(await file.text()) as {
-      vocabulary?: VocabularyEntry[];
+      vocabulary?: unknown[];
       settings?: unknown;
     };
 
     if (Array.isArray(data.vocabulary)) {
+      const usedIds = new Set<string>();
       const imported = data.vocabulary
         .filter(
-          (entry) =>
-            typeof entry.en === "string" &&
-            typeof entry.vi === "string",
+          (entry): entry is Record<string, unknown> =>
+            entry !== null &&
+            typeof entry === "object" &&
+            typeof (entry as Record<string, unknown>)["en"] === "string" &&
+            typeof (entry as Record<string, unknown>)["vi"] === "string",
         )
-        .map((entry) => ({
-          id: typeof entry.id === "string" && entry.id !== "" ? entry.id : crypto.randomUUID(),
-          en: entry.en.trim(),
-          vi: entry.vi.trim(),
-          ipa: typeof entry.ipa === "string" ? entry.ipa.trim() : "",
-        }))
+        .map((entry) => {
+          const candidateId =
+            typeof entry["id"] === "string" && entry["id"] !== ""
+              ? entry["id"]
+              : crypto.randomUUID();
+          const id = usedIds.has(candidateId) ? crypto.randomUUID() : candidateId;
+          usedIds.add(id);
+
+          return {
+            id,
+            en: String(entry["en"]).trim(),
+            vi: String(entry["vi"]).trim(),
+            ipa: typeof entry["ipa"] === "string" ? entry["ipa"].trim() : "",
+          };
+        })
         .filter(isUsableVocabularyEntry);
 
       if (imported.length === 0) {
