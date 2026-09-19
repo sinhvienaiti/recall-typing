@@ -9,7 +9,12 @@ export function parseBulkVocabulary(source: string): VocabularyEntry[] {
       const [en = "", vi = "", ipa = ""] = line.split("|").map((part) => part.trim());
       return { id: crypto.randomUUID(), en, vi, ipa };
     })
-    .filter((entry) => entry.en !== "" && entry.vi !== "");
+    .filter(
+      (entry) =>
+        entry.en !== "" &&
+        entry.vi !== "" &&
+        Array.from(entry.en).some((character) => /^[\\p{L}\\p{N}]$/u.test(character)),
+    );
 }
 
 export function vocabularyToBulk(entries: VocabularyEntry[]): string {
