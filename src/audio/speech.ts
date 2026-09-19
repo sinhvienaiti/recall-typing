@@ -1,0 +1,25 @@
+import type { RecallSettings } from "../types";
+
+function preferredVoice(lang: string): SpeechSynthesisVoice | null {
+  const voices = speechSynthesis.getVoices();
+  const exact = voices.find((voice) => voice.lang.toLowerCase() === lang.toLowerCase());
+  if (exact !== undefined) return exact;
+  const base = lang.split("-")[0]?.toLowerCase() ?? "en";
+  return voices.find((voice) => voice.lang.toLowerCase().startsWith(base)) ?? null;
+}
+
+export function speakEnglish(text: string, settings: RecallSettings): void {
+  if (!("speechSynthesis" in window)) return;
+  speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = settings.accent;
+  utterance.rate = settings.speechRate;
+  utterance.volume = settings.speechVolume;
+  const voice = preferredVoice(settings.accent);
+  if (voice !== null) utterance.voice = voice;
+  speechSynthesis.speak(utterance);
+}
+
+export function stopSpeech(): void {
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+}
