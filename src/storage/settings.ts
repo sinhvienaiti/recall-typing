@@ -28,8 +28,6 @@ function enumValue<T extends string>(value: unknown, allowed: readonly T[], fall
 export function normalizeSettings(raw: unknown): RecallSettings {
   if (raw === null || typeof raw !== "object") return structuredClone(defaultSettings);
   const data = raw as Record<string, unknown>;
-  const version = numberInRange(data["version"], 1, 1, 2);
-
   return {
     version: 2,
     hintMode: enumValue(data["hintMode"], ["full", "audio", "meaning"], defaultSettings.hintMode),
@@ -37,10 +35,11 @@ export function normalizeSettings(raw: unknown): RecallSettings {
     speechRate: numberInRange(data["speechRate"], defaultSettings.speechRate, 0.65, 1.4),
     speechVolume: numberInRange(data["speechVolume"], defaultSettings.speechVolume, 0, 1),
     autoSpeak: typeof data["autoSpeak"] === "boolean" ? data["autoSpeak"] : defaultSettings.autoSpeak,
-    quickRestartKey:
-      version < 2
-        ? defaultSettings.quickRestartKey
-        : enumValue(data["quickRestartKey"], ["Tab", "Escape"], defaultSettings.quickRestartKey),
+    quickRestartKey: enumValue(
+      data["quickRestartKey"],
+      ["Tab", "Escape"],
+      defaultSettings.quickRestartKey,
+    ),
     shuffle: typeof data["shuffle"] === "boolean" ? data["shuffle"] : defaultSettings.shuffle,
     targetCount: Math.round(numberInRange(data["targetCount"], defaultSettings.targetCount, 1, 500)),
     requireExactCase:
