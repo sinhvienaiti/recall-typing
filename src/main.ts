@@ -1,5 +1,12 @@
 import "./styles.css";
 import { speakEnglish, stopSpeech } from "./audio/speech";
+import {
+  buildRecallSession,
+  isRecallableCharacter,
+  isUsableVocabularyEntry,
+  matchesCharacter,
+  nextRecallIndex,
+} from "./game/recall";
 import { getVocabulary, replaceVocabulary } from "./storage/db";
 import {
   defaultSettings,
@@ -234,37 +241,19 @@ let startedAt = 0;
 let wordStartedAt = 0;
 let wordTimeTotal = 0;
 let feedbackTimer: number | null = null;
+let transitionTimer: number | null = null;
 
-function isRecallable(character: string): boolean {
-  return /[\p{L}\p{N}]/u.test(character);
-}
-
-function comparable(character: string): string {
-  return settings.requireExactCase
-    ? character
-    : character.toLocaleLowerCase("en-US");
+function clearTransitionTimer(): void {
+  if (transitionTimer === null) return;
+  window.clearTimeout(transitionTimer);
+  transitionTimer = null;
 }
 
 function currentEntry(): VocabularyEntry | null {
   return session[currentIndex] ?? null;
 }
 
-function skipStructural(text: string, from: number): number {
-  let index = from;
-  while (index < text.length && !isRecallable(text[index] ?? "")) index++;
-  return index;
-}
 
-function buildSession(entries: VocabularyEntry[]): VocabularyEntry[] {
-  const pool = [...entries];
-  if (settings.shuffle) {
-    for (let index = pool.length - 1; index > 0; index--) {
-      const swap = Math.floor(Math.random() * (index + 1));
-      [pool[index], pool[swap]] = [pool[swap] as VocabularyEntry, pool[index] as VocabularyEntry];
-    }
-  }
-  return pool.slice(0, Math.min(settings.targetCount, pool.length));
-}
 
 function setFeedback(message: string, kind: "normal" | "error" | "success" = "normal"): void {
   if (feedbackTimer !== null) window.clearTimeout(feedbackTimer);
@@ -316,7 +305,7 @@ function renderSlots(): void {
     const character = text[index] ?? "";
     const span = document.createElement("span");
 
-    if (!isRecallable(character)) {
+    if (!isRecallableCharacter(character)) {
       span.className = character.trim() === "" ? "slot structural space" : "slot structural";
       span.textContent = character.trim() === "" ? " " : character;
     } else if (index < cursor) {
@@ -356,7 +345,7 @@ function activateCurrent(): void {
     return;
   }
 
-  cursor = skipStructural(entry.en, 0);
+  cursor = nextRecallIndex(entry.en, 0);
   wordStartedAt = performance.now();
   transitioning = false;
   renderHint();
@@ -374,7 +363,14 @@ function startRun(): void {
 
   if (resultDialog.open) resultDialog.close();
   stopSpeech();
-  session = buildSession(vocabulary);
+  clearTransitionTimer();
+  session = buildRecallSession(vocabulary, settings.targetCount, settings.shuffle);
+  if (session.length === 0) {
+    running = false;
+    setFeedback("Add at least one valid English/Vietnamese vocabulary entry first.", "error");
+    return;
+  }
+
   currentIndex = 0;
   cursor = 0;
   running = true;
@@ -395,11 +391,11 @@ function correctCurrentCharacter(input: string): boolean {
   const entry = currentEntry();
   if (entry === null) return false;
   const expected = entry.en[cursor] ?? "";
-  return comparable(input) === comparable(expected);
+  return matchesCharacter(input, expected, settings.requireExactCase);
 }
 
 function handleCharacter(input: string): void {
-  if (!running || transitioning || !isRecallable(input)) return;
+  if (!running || transitioning || !isRecallableCharacter(input)) return;
   const entry = currentEntry();
   if (entry === null) return;
 
@@ -417,7 +413,7 @@ function handleCharacter(input: string): void {
   }
 
   cursor++;
-  cursor = skipStructural(entry.en, cursor);
+  cursor = nextRecallIndex(entry.en, cursor);
   renderSlots();
 
   if (cursor >= entry.en.length) {
@@ -438,7 +434,8 @@ function completeWord(): void {
   slots.classList.add("word-complete");
   setFeedback("Correct!", "success");
 
-  window.setTimeout(() => {
+  transitionTimer = window.setTimeout(() => {
+    transitionTimer = null;
     slots.classList.remove("word-complete");
     currentIndex++;
     if (currentIndex >= session.length) {
@@ -453,6 +450,7 @@ function finishRun(): void {
   if (!running) return;
   running = false;
   transitioning = false;
+  clearTransitionTimer();
   stopSpeech();
 
   const elapsedSec = Math.max(0, (performance.now() - startedAt) / 1000);
@@ -612,12 +610,18 @@ byId<HTMLButtonElement>("saveVocabulary").addEventListener("click", async () => 
     const vi = row.querySelector<HTMLInputElement>('input[data-field="vi"]')?.value.trim() ?? "";
     const ipa = row.querySelector<HTMLInputElement>('input[data-field="ipa"]')?.value.trim() ?? "";
     if (en === "" || vi === "") continue;
-    entries.push({
+    const entry = {
       id: row.dataset["id"] ?? crypto.randomUUID(),
       en,
       vi,
       ipa,
-    });
+    };
+    if (isUsableVocabularyEntry(entry)) entries.push(entry);
+  }
+
+  if (entries.length === 0) {
+    alert("Add at least one valid English/Vietnamese vocabulary entry.");
+    return;
   }
 
   vocabulary = entries;
@@ -657,14 +661,25 @@ byId<HTMLInputElement>("importBackup").addEventListener("change", async (event) 
     };
 
     if (Array.isArray(data.vocabulary)) {
-      vocabulary = data.vocabulary
-        .filter((entry) => typeof entry.en === "string" && typeof entry.vi === "string")
+      const imported = data.vocabulary
+        .filter(
+          (entry) =>
+            typeof entry.en === "string" &&
+            typeof entry.vi === "string",
+        )
         .map((entry) => ({
-          id: entry.id || crypto.randomUUID(),
-          en: entry.en,
-          vi: entry.vi,
-          ipa: entry.ipa ?? "",
-        }));
+          id: typeof entry.id === "string" && entry.id !== "" ? entry.id : crypto.randomUUID(),
+          en: entry.en.trim(),
+          vi: entry.vi.trim(),
+          ipa: typeof entry.ipa === "string" ? entry.ipa.trim() : "",
+        }))
+        .filter(isUsableVocabularyEntry);
+
+      if (imported.length === 0) {
+        throw new Error("Backup has no valid vocabulary entries");
+      }
+
+      vocabulary = imported;
       await replaceVocabulary(vocabulary);
     }
 
@@ -677,6 +692,10 @@ byId<HTMLInputElement>("importBackup").addEventListener("change", async (event) 
 
     renderVocabularyRows();
     byId<HTMLTextAreaElement>("bulkInput").value = vocabularyToBulk(vocabulary);
+    renderHint();
+    renderSlots();
+    updateStats();
+    if (running) startRun();
   } catch {
     alert("Invalid backup file.");
   } finally {
