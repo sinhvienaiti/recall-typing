@@ -3,13 +3,13 @@ import type { RecallSettings } from "../types";
 const KEY = "recallTypingSettings";
 
 export const defaultSettings: RecallSettings = {
-  version: 1,
+  version: 2,
   hintMode: "full",
   accent: "en-US",
   speechRate: 0.95,
   speechVolume: 1,
   autoSpeak: true,
-  quickRestartKey: "Tab",
+  quickRestartKey: "Escape",
   shuffle: true,
   targetCount: 30,
   requireExactCase: false,
@@ -28,14 +28,19 @@ function enumValue<T extends string>(value: unknown, allowed: readonly T[], fall
 export function normalizeSettings(raw: unknown): RecallSettings {
   if (raw === null || typeof raw !== "object") return structuredClone(defaultSettings);
   const data = raw as Record<string, unknown>;
+  const version = numberInRange(data["version"], 1, 1, 2);
+
   return {
-    version: 1,
+    version: 2,
     hintMode: enumValue(data["hintMode"], ["full", "audio", "meaning"], defaultSettings.hintMode),
     accent: enumValue(data["accent"], ["en-US", "en-GB"], defaultSettings.accent),
     speechRate: numberInRange(data["speechRate"], defaultSettings.speechRate, 0.65, 1.4),
     speechVolume: numberInRange(data["speechVolume"], defaultSettings.speechVolume, 0, 1),
     autoSpeak: typeof data["autoSpeak"] === "boolean" ? data["autoSpeak"] : defaultSettings.autoSpeak,
-    quickRestartKey: enumValue(data["quickRestartKey"], ["Tab", "Escape"], defaultSettings.quickRestartKey),
+    quickRestartKey:
+      version < 2
+        ? defaultSettings.quickRestartKey
+        : enumValue(data["quickRestartKey"], ["Tab", "Escape"], defaultSettings.quickRestartKey),
     shuffle: typeof data["shuffle"] === "boolean" ? data["shuffle"] : defaultSettings.shuffle,
     targetCount: Math.round(numberInRange(data["targetCount"], defaultSettings.targetCount, 1, 500)),
     requireExactCase:
