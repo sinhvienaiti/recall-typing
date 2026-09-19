@@ -1,3 +1,4 @@
+import { isUsableVocabularyEntry } from "../game/recall";
 import type { VocabularyEntry } from "../types";
 
 export function parseBulkVocabulary(source: string): VocabularyEntry[] {
@@ -9,14 +10,11 @@ export function parseBulkVocabulary(source: string): VocabularyEntry[] {
       const [en = "", vi = "", ipa = ""] = line.split("|").map((part) => part.trim());
       return { id: crypto.randomUUID(), en, vi, ipa };
     })
-    .filter(
-      (entry) =>
-        entry.en !== "" &&
-        entry.vi !== "" &&
-        Array.from(entry.en).some((character) => /^[\\p{L}\\p{N}]$/u.test(character)),
-    );
+    .filter(isUsableVocabularyEntry);
 }
 
 export function vocabularyToBulk(entries: VocabularyEntry[]): string {
-  return entries.map((entry) => `${entry.en} | ${entry.vi} | ${entry.ipa}`.trim()).join("\n");
+  return entries
+    .map((entry) => `${entry.en} | ${entry.vi} | ${entry.ipa}`.trim())
+    .join("\n");
 }
