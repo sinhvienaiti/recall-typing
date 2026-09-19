@@ -169,8 +169,8 @@ app.innerHTML = `
         <label>
           ${settingTitle("Quick restart", "Reset to a ready state. Press another key, then the 3-second countdown starts.")}
           <select id="quickRestartKey">
-            <option value="Tab">Tab</option>
             <option value="Escape">Escape</option>
+            <option value="Tab">Tab</option>
           </select>
         </label>
 
