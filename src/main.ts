@@ -27,6 +27,10 @@ import {
 const app = document.querySelector<HTMLDivElement>("#app");
 if (app === null) throw new Error("#app not found");
 
+function settingTitle(label: string, help: string): string {
+  return `<span class="setting-title"><span>${label}</span><span class="setting-help" tabindex="0" role="note" aria-label="${help}" data-help="${help}">?</span></span>`;
+}
+
 app.innerHTML = `
   <div class="recall-shell">
     <header class="topbar">
@@ -48,7 +52,7 @@ app.innerHTML = `
       </div>
     </header>
 
-    <main class="study-stage">
+    <main id="studyStage" class="study-stage" tabindex="-1">
       <section id="hintPanel" class="hint-panel">
         <div class="hint-kicker">RECALL THE ENGLISH WORD</div>
         <div id="hintMeaning" class="hint-meaning">Press Start to begin</div>
@@ -60,6 +64,10 @@ app.innerHTML = `
       </section>
 
       <section class="typing-card">
+        <div id="startOverlay" class="start-overlay hidden" aria-live="polite">
+          <strong id="startOverlayTitle">Ready when you are</strong>
+          <span id="startOverlayText">Press any key to start</span>
+        </div>
         <div id="slots" class="slots" aria-live="polite"></div>
         <div id="feedback" class="feedback">Correct letters reveal one by one.</div>
       </section>
@@ -122,7 +130,7 @@ app.innerHTML = `
 
       <div class="settings-grid">
         <label>
-          <span>Hint style</span>
+          ${settingTitle("Hint style", "Choose which hints are visible while recalling the English spelling.")}
           <select id="hintMode">
             <option value="full">Vietnamese + IPA + audio</option>
             <option value="audio">Audio only</option>
@@ -131,7 +139,7 @@ app.innerHTML = `
         </label>
 
         <label>
-          <span>Accent</span>
+          ${settingTitle("Accent", "Choose the English voice accent used for pronunciation.")}
           <select id="accent">
             <option value="en-US">US</option>
             <option value="en-GB">UK</option>
@@ -139,19 +147,19 @@ app.innerHTML = `
         </label>
 
         <label>
-          <span>Speech speed</span>
+          ${settingTitle("Speech speed", "Adjust how quickly the English target is pronounced.")}
           <input id="speechRate" type="range" min="0.65" max="1.4" step="0.05" />
           <output id="speechRateValue"></output>
         </label>
 
         <label>
-          <span>Speech volume</span>
+          ${settingTitle("Speech volume", "Adjust pronunciation volume without changing game sound effects.")}
           <input id="speechVolume" type="range" min="0" max="1" step="0.05" />
           <output id="speechVolumeValue"></output>
         </label>
 
         <label>
-          <span>Auto pronunciation</span>
+          ${settingTitle("Auto pronunciation", "Automatically pronounce each new English target.")}
           <select id="autoSpeak">
             <option value="true">Enabled</option>
             <option value="false">Disabled</option>
@@ -159,7 +167,7 @@ app.innerHTML = `
         </label>
 
         <label>
-          <span>Quick restart</span>
+          ${settingTitle("Quick restart", "Reset to a ready state. Press another key, then the 3-second countdown starts.")}
           <select id="quickRestartKey">
             <option value="Tab">Tab</option>
             <option value="Escape">Escape</option>
@@ -167,7 +175,7 @@ app.innerHTML = `
         </label>
 
         <label>
-          <span>Shuffle</span>
+          ${settingTitle("Shuffle", "Randomize vocabulary order for each run.")}
           <select id="shuffle">
             <option value="true">Enabled</option>
             <option value="false">Disabled</option>
@@ -175,12 +183,12 @@ app.innerHTML = `
         </label>
 
         <label>
-          <span>Words per run</span>
+          ${settingTitle("Words per run", "Limit how many vocabulary entries appear in one session.")}
           <input id="targetCount" type="number" min="1" max="500" step="1" />
         </label>
 
         <label>
-          <span>Case sensitive</span>
+          ${settingTitle("Case sensitive", "Require uppercase and lowercase letters to match exactly.")}
           <select id="requireExactCase">
             <option value="false">No</option>
             <option value="true">Yes</option>
@@ -242,11 +250,102 @@ let wordStartedAt = 0;
 let wordTimeTotal = 0;
 let feedbackTimer: number | null = null;
 let transitionTimer: number | null = null;
+let countdownTimer: number | null = null;
+let countdownActive = false;
+let readyForKey = false;
 
 function clearTransitionTimer(): void {
   if (transitionTimer === null) return;
   window.clearTimeout(transitionTimer);
   transitionTimer = null;
+}
+
+function clearCountdownTimer(): void {
+  if (countdownTimer === null) return;
+  window.clearTimeout(countdownTimer);
+  countdownTimer = null;
+}
+
+function focusGame(): void {
+  const active = document.activeElement;
+  if (active instanceof HTMLElement) active.blur();
+  byId<HTMLElement>("studyStage").focus({ preventScroll: true });
+}
+
+function setStartOverlay(title: string, text: string): void {
+  const overlay = byId("startOverlay");
+  byId("startOverlayTitle").textContent = title;
+  byId("startOverlayText").textContent = text;
+  overlay.classList.remove("hidden");
+}
+
+function hideStartOverlay(): void {
+  byId("startOverlay").classList.add("hidden");
+}
+
+function prepareRestart(): void {
+  clearCountdownTimer();
+  clearTransitionTimer();
+  stopSpeech();
+  countdownActive = false;
+  readyForKey = true;
+  running = false;
+  transitioning = false;
+  session = [];
+  currentIndex = 0;
+  cursor = 0;
+  wrongAttempts = 0;
+  totalAttempts = 0;
+  completedWords = 0;
+  streak = 0;
+  maxStreak = 0;
+  wordTimeTotal = 0;
+  slots.classList.remove("word-complete", "wrong-pulse");
+  if (feedbackTimer !== null) {
+    window.clearTimeout(feedbackTimer);
+    feedbackTimer = null;
+  }
+  if (resultDialog.open) resultDialog.close();
+  renderHint();
+  renderSlots();
+  updateStats();
+  setFeedback("Press any key when you are ready.");
+  setStartOverlay("Ready when you are", "Press any key to start");
+  focusGame();
+}
+
+function beginCountdown(): void {
+  if (vocabulary.length === 0) {
+    setFeedback("Add at least one vocabulary entry first.", "error");
+    return;
+  }
+
+  clearCountdownTimer();
+  clearTransitionTimer();
+  stopSpeech();
+  if (resultDialog.open) resultDialog.close();
+  readyForKey = false;
+  countdownActive = true;
+  running = false;
+  transitioning = false;
+  focusGame();
+
+  let remaining = 3;
+  const tick = (): void => {
+    setStartOverlay(String(remaining), "Get ready");
+    if (remaining === 1) {
+      countdownTimer = window.setTimeout(() => {
+        countdownTimer = null;
+        countdownActive = false;
+        hideStartOverlay();
+        startRun();
+      }, 1000);
+      return;
+    }
+    remaining--;
+    countdownTimer = window.setTimeout(tick, 1000);
+  };
+  tick();
 }
 
 function currentEntry(): VocabularyEntry | null {
@@ -288,11 +387,33 @@ function renderHint(): void {
   ipa.textContent = showText ? entry.ipa : "";
 }
 
+function updateSlotScale(text: string): void {
+  if (text === "") {
+    slots.style.removeProperty("--slot-size");
+    slots.style.removeProperty("--slot-gap");
+    return;
+  }
+
+  const availableWidth = Math.max(
+    280,
+    Math.min(1120, slots.parentElement?.clientWidth ?? window.innerWidth - 32),
+  );
+  const characterCount = Math.max(1, Array.from(text).length);
+  const charactersPerLine = Math.ceil(characterCount / 4);
+  const estimated = availableWidth / Math.max(1, charactersPerLine * 0.82);
+  const size = Math.max(18, Math.min(48, estimated));
+  const gap = Math.max(2, Math.min(6, size * 0.08));
+
+  slots.style.setProperty("--slot-size", `${size}px`);
+  slots.style.setProperty("--slot-gap", `${gap}px`);
+}
+
 function renderSlots(): void {
   slots.replaceChildren();
   const entry = currentEntry();
 
   if (entry === null) {
+    updateSlotScale("");
     slots.classList.add("empty");
     slots.textContent = running ? "No target" : "_ _ _ _ _";
     return;
@@ -300,6 +421,7 @@ function renderSlots(): void {
 
   slots.classList.remove("empty");
   const text = entry.en;
+  updateSlotScale(text);
 
   for (let index = 0; index < text.length; index++) {
     const character = text[index] ?? "";
@@ -361,6 +483,10 @@ function startRun(): void {
     return;
   }
 
+  clearCountdownTimer();
+  countdownActive = false;
+  readyForKey = false;
+  hideStartOverlay();
   if (resultDialog.open) resultDialog.close();
   stopSpeech();
   clearTransitionTimer();
@@ -391,6 +517,7 @@ function startRun(): void {
   wordTimeTotal = 0;
   setFeedback("Type the hidden English spelling.");
   activateCurrent();
+  focusGame();
 }
 
 function correctCurrentCharacter(input: string): boolean {
@@ -500,7 +627,7 @@ function renderResult(result: RecallResult): void {
     grid.append(item);
   }
 
-  byId("resultShortcut").textContent = `${settings.quickRestartKey} restarts instantly`;
+  byId("resultShortcut").textContent = `${settings.quickRestartKey} resets to ready`;
   resultDialog.showModal();
 }
 
@@ -514,17 +641,26 @@ function isFormTarget(target: EventTarget | null): boolean {
 }
 
 window.addEventListener("keydown", (event) => {
-  if (resultDialog.open && event.key === settings.quickRestartKey) {
-    event.preventDefault();
-    startRun();
-    return;
-  }
-
-  if (vocabularyDialog.open || settingsDialog.open || isFormTarget(event.target)) return;
+  if (vocabularyDialog.open || settingsDialog.open) return;
 
   if (event.key === settings.quickRestartKey) {
     event.preventDefault();
-    startRun();
+    prepareRestart();
+    return;
+  }
+
+  if (resultDialog.open) return;
+  if (isFormTarget(event.target)) return;
+
+  if (readyForKey) {
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    event.preventDefault();
+    beginCountdown();
+    return;
+  }
+
+  if (countdownActive) {
+    if (!event.metaKey && !event.ctrlKey && !event.altKey) event.preventDefault();
     return;
   }
 
@@ -538,8 +674,8 @@ window.addEventListener("keydown", (event) => {
   handleCharacter(event.key);
 });
 
-byId<HTMLButtonElement>("startButton").addEventListener("click", startRun);
-byId<HTMLButtonElement>("resultRestart").addEventListener("click", startRun);
+byId<HTMLButtonElement>("startButton").addEventListener("click", beginCountdown);
+byId<HTMLButtonElement>("resultRestart").addEventListener("click", beginCountdown);
 byId<HTMLButtonElement>("closeResult").addEventListener("click", () => resultDialog.close());
 byId<HTMLButtonElement>("speakButton").addEventListener("click", speakCurrent);
 
@@ -780,4 +916,12 @@ updateStats();
 renderHint();
 renderSlots();
 
-window.addEventListener("beforeunload", stopSpeech);
+window.addEventListener("resize", () => {
+  const entry = currentEntry();
+  if (entry !== null) updateSlotScale(entry.en);
+});
+
+window.addEventListener("beforeunload", () => {
+  clearCountdownTimer();
+  stopSpeech();
+});
