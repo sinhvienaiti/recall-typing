@@ -575,10 +575,10 @@ function createVocabularyRow(entry: VocabularyEntry): HTMLTableRowElement {
   return row;
 }
 
-function renderVocabularyRows(): void {
+function renderVocabularyRows(entries: VocabularyEntry[] = vocabulary): void {
   const body = byId<HTMLTableSectionElement>("vocabRows");
   body.replaceChildren();
-  for (const entry of vocabulary) body.append(createVocabularyRow(entry));
+  for (const entry of entries) body.append(createVocabularyRow(entry));
   updateVocabularyCount();
 }
 
@@ -604,8 +604,8 @@ byId<HTMLButtonElement>("toggleBulk").addEventListener("click", () => {
 });
 
 byId<HTMLButtonElement>("applyBulk").addEventListener("click", () => {
-  vocabulary = parseBulkVocabulary(byId<HTMLTextAreaElement>("bulkInput").value);
-  renderVocabularyRows();
+  const parsed = parseBulkVocabulary(byId<HTMLTextAreaElement>("bulkInput").value);
+  renderVocabularyRows(parsed);
 });
 
 byId<HTMLButtonElement>("saveVocabulary").addEventListener("click", async () => {
