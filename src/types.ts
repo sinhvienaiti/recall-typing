@@ -10,7 +10,7 @@ export type QuickRestartKey = "Tab" | "Escape";
 export type Accent = "en-US" | "en-GB";
 
 export type RecallSettings = {
-  version: 1;
+  version: 2;
   hintMode: HintMode;
   accent: Accent;
   speechRate: number;
