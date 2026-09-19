@@ -320,15 +320,9 @@ function beginCountdown(): void {
     return;
   }
 
-  clearCountdownTimer();
-  clearTransitionTimer();
-  stopSpeech();
-  if (resultDialog.open) resultDialog.close();
+  prepareRestart();
   readyForKey = false;
   countdownActive = true;
-  running = false;
-  transitioning = false;
-  focusGame();
 
   let remaining = 3;
   const tick = (): void => {
@@ -375,7 +369,11 @@ function renderHint(): void {
   const speaker = byId<HTMLButtonElement>("speakButton");
 
   if (entry === null) {
-    meaning.textContent = running ? "No target" : "Press Start to begin";
+    meaning.textContent = running
+      ? "No target"
+      : readyForKey
+        ? "Press any key to start"
+        : "Press Start to begin";
     ipa.textContent = "";
     speaker.disabled = true;
     return;
