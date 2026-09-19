@@ -324,7 +324,7 @@ function renderSlots(): void {
       span.textContent = character;
     } else {
       span.className = index === cursor ? "slot hidden active" : "slot hidden";
-      span.textContent = "•";
+      span.textContent = "\u00A0";
       span.setAttribute("aria-label", "hidden character");
     }
 
