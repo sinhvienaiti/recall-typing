@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { VocabularyEntry } from "../types";
 import {
-  buildRecallSession,
+  RecallSessionBag,
   isRecallableCharacter,
   isUsableVocabularyEntry,
   matchesCharacter,
@@ -39,31 +39,54 @@ describe("Recall Typing core", () => {
     expect(isUsableVocabularyEntry(punctuationOnly)).toBe(false);
   });
 
-  it("limits a non-shuffled session without mutating the source", () => {
-    const entries: VocabularyEntry[] = [
-      { id: "a", en: "cache", vi: "bộ nhớ đệm", ipa: "" },
-      { id: "b", en: "service", vi: "dịch vụ", ipa: "" },
-      { id: "c", en: "module", vi: "mô-đun", ipa: "" },
-    ];
-    const copy = [...entries];
-
-    expect(buildRecallSession(entries, 2, false).map((entry) => entry.id)).toEqual(["a", "b"]);
-    expect(entries).toEqual(copy);
-  });
-
-  it("shuffles only the copied session pool", () => {
+  it("does not mutate the source and does not repeat before a cycle is exhausted", () => {
     const entries: VocabularyEntry[] = [
       { id: "a", en: "cache", vi: "a", ipa: "" },
       { id: "b", en: "service", vi: "b", ipa: "" },
       { id: "c", en: "module", vi: "c", ipa: "" },
     ];
+    const sourceIds = entries.map((entry) => entry.id);
     const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    const bag = new RecallSessionBag(entries);
 
-    const result = buildRecallSession(entries, 3, true);
+    const firstCycle = bag.take(3);
+    const nextEntry = bag.take(1)[0];
 
-    expect(result).not.toBe(entries);
-    expect(entries.map((entry) => entry.id)).toEqual(["a", "b", "c"]);
-    expect(result).toHaveLength(3);
+    expect(entries.map((entry) => entry.id)).toEqual(sourceIds);
+    expect(new Set(firstCycle.map((entry) => entry.id)).size).toBe(3);
+    expect(nextEntry?.id).not.toBe(firstCycle[2]?.id);
     random.mockRestore();
+  });
+
+  it("continues the same shuffled cycle across recall runs", () => {
+    const entries: VocabularyEntry[] = [
+      { id: "a", en: "cache", vi: "a", ipa: "" },
+      { id: "b", en: "service", vi: "b", ipa: "" },
+      { id: "c", en: "module", vi: "c", ipa: "" },
+      { id: "d", en: "queue", vi: "d", ipa: "" },
+    ];
+    const random = vi.spyOn(Math, "random").mockReturnValue(0.5);
+    const bag = new RecallSessionBag(entries);
+
+    const firstRun = bag.take(2);
+    const secondRun = bag.take(2);
+
+    expect(new Set([...firstRun, ...secondRun].map((entry) => entry.id)).size).toBe(4);
+    random.mockRestore();
+  });
+
+  it("resets the bag when vocabulary changes", () => {
+    const bag = new RecallSessionBag([
+      { id: "a", en: "cache", vi: "a", ipa: "" },
+      { id: "b", en: "service", vi: "b", ipa: "" },
+    ]);
+
+    bag.take(1);
+    bag.setEntries([
+      { id: "x", en: "queue", vi: "x", ipa: "" },
+      { id: "y", en: "worker", vi: "y", ipa: "" },
+    ]);
+
+    expect(bag.take(2).map((entry) => entry.id).sort()).toEqual(["x", "y"]);
   });
 });

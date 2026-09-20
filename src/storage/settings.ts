@@ -3,14 +3,13 @@ import type { RecallSettings } from "../types";
 const KEY = "recallTypingSettings";
 
 export const defaultSettings: RecallSettings = {
-  version: 2,
+  version: 3,
   hintMode: "full",
   accent: "en-US",
   speechRate: 0.95,
   speechVolume: 1,
   autoSpeak: true,
   quickRestartKey: "Escape",
-  shuffle: true,
   targetCount: 30,
   requireExactCase: false,
 };
@@ -29,7 +28,7 @@ export function normalizeSettings(raw: unknown): RecallSettings {
   if (raw === null || typeof raw !== "object") return structuredClone(defaultSettings);
   const data = raw as Record<string, unknown>;
   return {
-    version: 2,
+    version: 3,
     hintMode: enumValue(data["hintMode"], ["full", "audio", "meaning"], defaultSettings.hintMode),
     accent: enumValue(data["accent"], ["en-US", "en-GB"], defaultSettings.accent),
     speechRate: numberInRange(data["speechRate"], defaultSettings.speechRate, 0.65, 1.4),
@@ -40,7 +39,6 @@ export function normalizeSettings(raw: unknown): RecallSettings {
       ["Tab", "Escape"],
       defaultSettings.quickRestartKey,
     ),
-    shuffle: typeof data["shuffle"] === "boolean" ? data["shuffle"] : defaultSettings.shuffle,
     targetCount: Math.round(numberInRange(data["targetCount"], defaultSettings.targetCount, 1, 500)),
     requireExactCase:
       typeof data["requireExactCase"] === "boolean"

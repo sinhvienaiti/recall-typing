@@ -29,13 +29,39 @@ export function isUsableVocabularyEntry(entry: VocabularyEntry): boolean {
   );
 }
 
-export function buildRecallSession(
-  entries: VocabularyEntry[],
-  targetCount: number,
-  shuffle: boolean,
-): VocabularyEntry[] {
-  const pool = entries.filter(isUsableVocabularyEntry);
-  if (shuffle) {
+export class RecallSessionBag {
+  private entries: VocabularyEntry[] = [];
+  private remaining: VocabularyEntry[] = [];
+  private lastId: string | null = null;
+
+  constructor(entries: VocabularyEntry[] = []) {
+    this.setEntries(entries);
+  }
+
+  setEntries(entries: VocabularyEntry[]): void {
+    this.entries = entries.filter(isUsableVocabularyEntry);
+    this.remaining = [];
+    this.lastId = null;
+  }
+
+  take(targetCount: number): VocabularyEntry[] {
+    const result: VocabularyEntry[] = [];
+    const count = Math.max(0, Math.floor(targetCount));
+
+    while (result.length < count && this.entries.length > 0) {
+      if (this.remaining.length === 0) this.refill();
+      const entry = this.remaining.shift();
+      if (entry === undefined) break;
+      this.lastId = entry.id;
+      result.push(entry);
+    }
+
+    return result;
+  }
+
+  private refill(): void {
+    const pool = [...this.entries];
+
     for (let index = pool.length - 1; index > 0; index--) {
       const swap = Math.floor(Math.random() * (index + 1));
       [pool[index], pool[swap]] = [
@@ -43,6 +69,17 @@ export function buildRecallSession(
         pool[index] as VocabularyEntry,
       ];
     }
+
+    if (pool.length > 1 && pool[0]?.id === this.lastId) {
+      const replacementIndex = pool.findIndex((entry) => entry.id !== this.lastId);
+      if (replacementIndex > 0) {
+        [pool[0], pool[replacementIndex]] = [
+          pool[replacementIndex] as VocabularyEntry,
+          pool[0] as VocabularyEntry,
+        ];
+      }
+    }
+
+    this.remaining = pool;
   }
-  return pool.slice(0, Math.min(targetCount, pool.length));
 }

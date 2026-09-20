@@ -1,7 +1,7 @@
 import "./styles.css";
 import { speakEnglish, stopSpeech } from "./audio/speech";
 import {
-  buildRecallSession,
+  RecallSessionBag,
   isRecallableCharacter,
   isUsableVocabularyEntry,
   matchesCharacter,
@@ -199,14 +199,6 @@ app.innerHTML = `
         </label>
 
         <label>
-          ${settingTitle("Shuffle", "Randomize vocabulary order for each run.")}
-          <select id="shuffle">
-            <option value="true">Enabled</option>
-            <option value="false">Disabled</option>
-          </select>
-        </label>
-
-        <label>
           ${settingTitle("Words per run", "Limit how many vocabulary entries appear in one session.")}
           <input id="targetCount" type="number" min="1" max="500" step="1" />
         </label>
@@ -274,6 +266,7 @@ try {
 }
 
 let settings = loadSettings();
+const recallBag = new RecallSessionBag(vocabulary);
 let session: VocabularyEntry[] = [];
 let currentIndex = 0;
 let cursor = 0;
@@ -528,7 +521,7 @@ function startRun(): void {
   stopSpeech();
   clearTransitionTimer();
   slots.classList.remove("word-complete", "wrong-pulse");
-  session = buildRecallSession(vocabulary, settings.targetCount, settings.shuffle);
+  session = recallBag.take(settings.targetCount);
   if (session.length === 0) {
     currentIndex = 0;
     running = false;
@@ -827,6 +820,7 @@ function useCustomSource(): void {
   sourceSettings = { ...sourceSettings, mode: "custom" };
   saveVocabularySourceSettings(sourceSettings);
   vocabulary = customVocabulary;
+  recallBag.setEntries(vocabulary);
   prepareRestart();
   renderVocabularySourceUi();
 }
@@ -835,6 +829,7 @@ async function useClassSource(level: number): Promise<void> {
   try {
     const index = await ensureVocabularyIndex();
     vocabulary = await loadVocabularyLevel(level, index);
+    recallBag.setEntries(vocabulary);
     sourceSettings = { mode: "class", level };
     saveVocabularySourceSettings(sourceSettings);
     prepareRestart();
@@ -927,6 +922,7 @@ byId<HTMLButtonElement>("saveVocabulary").addEventListener("click", async () => 
   sourceSettings = { ...sourceSettings, mode: "custom" };
   saveVocabularySourceSettings(sourceSettings);
   vocabulary = customVocabulary;
+  recallBag.setEntries(vocabulary);
   vocabularyDialog.close();
   prepareRestart();
 });
@@ -995,6 +991,7 @@ byId<HTMLInputElement>("importBackup").addEventListener("change", async (event) 
       await replaceVocabulary(customVocabulary);
       if (sourceSettings.mode === "custom") {
         vocabulary = customVocabulary;
+        recallBag.setEntries(vocabulary);
       }
     }
 
@@ -1026,7 +1023,6 @@ function fillSettingsForm(value: RecallSettings): void {
   byId<HTMLInputElement>("speechVolume").value = String(value.speechVolume);
   byId<HTMLSelectElement>("autoSpeak").value = String(value.autoSpeak);
   byId<HTMLSelectElement>("quickRestartKey").value = value.quickRestartKey;
-  byId<HTMLSelectElement>("shuffle").value = String(value.shuffle);
   byId<HTMLInputElement>("targetCount").value = String(value.targetCount);
   byId<HTMLSelectElement>("requireExactCase").value = String(value.requireExactCase);
   updateSettingOutputs();
@@ -1059,7 +1055,6 @@ byId<HTMLButtonElement>("saveSettings").addEventListener("click", () => {
     speechVolume: Number(byId<HTMLInputElement>("speechVolume").value),
     autoSpeak: byId<HTMLSelectElement>("autoSpeak").value === "true",
     quickRestartKey: byId<HTMLSelectElement>("quickRestartKey").value,
-    shuffle: byId<HTMLSelectElement>("shuffle").value === "true",
     targetCount: Number(byId<HTMLInputElement>("targetCount").value),
     requireExactCase: byId<HTMLSelectElement>("requireExactCase").value === "true",
   });

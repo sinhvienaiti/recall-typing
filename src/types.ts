@@ -10,14 +10,13 @@ export type QuickRestartKey = "Tab" | "Escape";
 export type Accent = "en-US" | "en-GB";
 
 export type RecallSettings = {
-  version: 2;
+  version: 3;
   hintMode: HintMode;
   accent: Accent;
   speechRate: number;
   speechVolume: number;
   autoSpeak: boolean;
   quickRestartKey: QuickRestartKey;
-  shuffle: boolean;
   targetCount: number;
   requireExactCase: boolean;
 };
