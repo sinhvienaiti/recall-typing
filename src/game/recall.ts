@@ -46,12 +46,20 @@ export class RecallSessionBag {
 
   take(targetCount: number): VocabularyEntry[] {
     const result: VocabularyEntry[] = [];
-    const count = Math.max(0, Math.floor(targetCount));
+    const selectedIds = new Set<string>();
+    const count = Math.min(
+      this.entries.length,
+      Math.max(0, Math.floor(targetCount)),
+    );
 
     while (result.length < count && this.entries.length > 0) {
-      if (this.remaining.length === 0) this.refill();
+      if (this.remaining.length === 0) this.refill(selectedIds);
+
       const entry = this.remaining.shift();
       if (entry === undefined) break;
+      if (selectedIds.has(entry.id)) continue;
+
+      selectedIds.add(entry.id);
       this.lastId = entry.id;
       result.push(entry);
     }
@@ -59,7 +67,7 @@ export class RecallSessionBag {
     return result;
   }
 
-  private refill(): void {
+  private refill(excludedIds: Set<string> = new Set()): void {
     const pool = [...this.entries];
 
     for (let index = pool.length - 1; index > 0; index--) {
@@ -70,16 +78,32 @@ export class RecallSessionBag {
       ];
     }
 
-    if (pool.length > 1 && pool[0]?.id === this.lastId) {
-      const replacementIndex = pool.findIndex((entry) => entry.id !== this.lastId);
-      if (replacementIndex > 0) {
-        [pool[0], pool[replacementIndex]] = [
-          pool[replacementIndex] as VocabularyEntry,
-          pool[0] as VocabularyEntry,
-        ];
+    const fresh = pool.filter((entry) => !excludedIds.has(entry.id));
+    const alreadySelected = pool.filter((entry) =>
+      excludedIds.has(entry.id),
+    );
+    const ordered = [...fresh, ...alreadySelected];
+
+    if (ordered.length > 1 && ordered[0]?.id === this.lastId) {
+      const replacementIndex = ordered.findIndex(
+        (entry) => entry.id !== this.lastId && !excludedIds.has(entry.id),
+      );
+      const fallbackIndex = ordered.findIndex(
+        (entry) => entry.id !== this.lastId,
+      );
+      const swapIndex =
+        replacementIndex > 0 ? replacementIndex : fallbackIndex;
+
+      if (swapIndex > 0) {
+        const first = ordered[0];
+        const replacement = ordered[swapIndex];
+        if (first !== undefined && replacement !== undefined) {
+          ordered[0] = replacement;
+          ordered[swapIndex] = first;
+        }
       }
     }
 
-    this.remaining = pool;
+    this.remaining = ordered;
   }
 }
