@@ -75,6 +75,20 @@ describe("Recall Typing core", () => {
     random.mockRestore();
   });
 
+  it("limits a run to unique entries when targetCount is larger than the vocabulary", () => {
+    const entries: VocabularyEntry[] = [
+      { id: "a", en: "cache", vi: "a", ipa: "" },
+      { id: "b", en: "service", vi: "b", ipa: "" },
+      { id: "c", en: "module", vi: "c", ipa: "" },
+    ];
+    const bag = new RecallSessionBag(entries);
+
+    const run = bag.take(30);
+
+    expect(run).toHaveLength(3);
+    expect(new Set(run.map((entry) => entry.id)).size).toBe(3);
+  });
+
   it("resets the bag when vocabulary changes", () => {
     const bag = new RecallSessionBag([
       { id: "a", en: "cache", vi: "a", ipa: "" },
