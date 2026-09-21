@@ -29,6 +29,7 @@ import {
   loadVocabularySourceSettings,
   saveVocabularySourceSettings,
   type VocabularyIndex,
+  type VocabularySourceMode,
 } from "./vocabulary/library";
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -58,6 +59,8 @@ app.innerHTML = `
         <button id="settingsButton">Settings</button>
       </div>
     </header>
+
+    <div id="gameNotice" class="game-notice" role="status" aria-live="polite"></div>
 
     <main id="studyStage" class="study-stage" tabindex="-1">
       <section id="hintPanel" class="hint-panel">
@@ -251,6 +254,7 @@ const feedback = byId<HTMLDivElement>("feedback");
 
 let customVocabulary = await getVocabulary();
 let sourceSettings = loadVocabularySourceSettings();
+let vocabularySourceTab: VocabularySourceMode = sourceSettings.mode;
 let libraryIndex: VocabularyIndex | null = null;
 let vocabulary = customVocabulary;
 
@@ -281,6 +285,7 @@ let startedAt = 0;
 let wordStartedAt = 0;
 let wordTimeTotal = 0;
 let feedbackTimer: number | null = null;
+let noticeTimer: number | null = null;
 let transitionTimer: number | null = null;
 let countdownTimer: number | null = null;
 let countdownActive = false;
@@ -313,6 +318,17 @@ function setStartOverlay(title: string, text: string): void {
 
 function hideStartOverlay(): void {
   byId("startOverlay").classList.add("hidden");
+}
+
+function showGameNotice(message: string): void {
+  if (noticeTimer !== null) window.clearTimeout(noticeTimer);
+  const notice = byId("gameNotice");
+  notice.textContent = message;
+  notice.classList.add("visible");
+  noticeTimer = window.setTimeout(() => {
+    notice.classList.remove("visible");
+    noticeTimer = null;
+  }, 2600);
 }
 
 function prepareRestart(): void {
@@ -763,22 +779,22 @@ async function ensureVocabularyIndex(): Promise<VocabularyIndex> {
 function renderVocabularySourceUi(): void {
   byId<HTMLButtonElement>("sourceClass").classList.toggle(
     "active",
-    sourceSettings.mode === "class",
+    vocabularySourceTab === "class",
   );
   byId<HTMLButtonElement>("sourceCustom").classList.toggle(
     "active",
-    sourceSettings.mode === "custom",
+    vocabularySourceTab === "custom",
   );
   byId("classSourcePanel").classList.toggle(
     "hidden",
-    sourceSettings.mode !== "class",
+    vocabularySourceTab !== "class",
   );
   byId("customSourcePanel").classList.toggle(
     "hidden",
-    sourceSettings.mode !== "custom",
+    vocabularySourceTab !== "custom",
   );
 
-  if (sourceSettings.mode === "custom") {
+  if (vocabularySourceTab === "custom") {
     renderVocabularyRows();
     byId<HTMLTextAreaElement>("bulkInput").value =
       vocabularyToBulk(customVocabulary);
@@ -816,35 +832,40 @@ async function populateClassLevels(): Promise<void> {
   updateClassLevelMeta();
 }
 
-function useCustomSource(): void {
-  sourceSettings = { ...sourceSettings, mode: "custom" };
-  saveVocabularySourceSettings(sourceSettings);
-  vocabulary = customVocabulary;
-  recallBag.setEntries(vocabulary);
-  prepareRestart();
-  renderVocabularySourceUi();
-}
-
 async function useClassSource(level: number): Promise<void> {
+  const applyButton = byId<HTMLButtonElement>("applyClassSource");
+  applyButton.disabled = true;
+  applyButton.textContent = "Applying…";
+
   try {
     const index = await ensureVocabularyIndex();
+    const metadata = index.levels.find((item) => item.level === level);
     vocabulary = await loadVocabularyLevel(level, index);
     recallBag.setEntries(vocabulary);
     sourceSettings = { mode: "class", level };
+    vocabularySourceTab = "class";
     saveVocabularySourceSettings(sourceSettings);
+    vocabularyDialog.close();
     prepareRestart();
-    renderVocabularySourceUi();
-    updateClassLevelMeta();
+    showGameNotice(
+      metadata === undefined
+        ? `Level ${String(level).padStart(3, "0")} applied`
+        : `Level ${String(level).padStart(3, "0")} applied · ${metadata.count} entries`,
+    );
   } catch (error) {
     alert(
       error instanceof Error
         ? error.message
         : "Unable to load the selected vocabulary level.",
     );
+  } finally {
+    applyButton.disabled = false;
+    applyButton.textContent = "Use level";
   }
 }
 
 byId<HTMLButtonElement>("vocabularyButton").addEventListener("click", async () => {
+  vocabularySourceTab = sourceSettings.mode;
   try {
     await populateClassLevels();
   } catch (error) {
@@ -855,19 +876,20 @@ byId<HTMLButtonElement>("vocabularyButton").addEventListener("click", async () =
 });
 
 byId<HTMLButtonElement>("sourceClass").addEventListener("click", async () => {
+  vocabularySourceTab = "class";
+  renderVocabularySourceUi();
   try {
     await populateClassLevels();
-    await useClassSource(Number(byId<HTMLSelectElement>("classLevel").value));
   } catch (error) {
     alert(
       error instanceof Error ? error.message : "Unable to load vocabulary levels.",
     );
-    renderVocabularySourceUi();
   }
 });
 
 byId<HTMLButtonElement>("sourceCustom").addEventListener("click", () => {
-  useCustomSource();
+  vocabularySourceTab = "custom";
+  renderVocabularySourceUi();
 });
 
 byId<HTMLSelectElement>("classLevel").addEventListener(
@@ -920,11 +942,13 @@ byId<HTMLButtonElement>("saveVocabulary").addEventListener("click", async () => 
   customVocabulary = entries;
   await replaceVocabulary(customVocabulary);
   sourceSettings = { ...sourceSettings, mode: "custom" };
+  vocabularySourceTab = "custom";
   saveVocabularySourceSettings(sourceSettings);
   vocabulary = customVocabulary;
   recallBag.setEntries(vocabulary);
   vocabularyDialog.close();
   prepareRestart();
+  showGameNotice(`Custom vocabulary saved · ${customVocabulary.length} entries`);
 });
 
 function downloadJson(filename: string, data: unknown): void {
@@ -1080,5 +1104,6 @@ window.addEventListener("resize", () => {
 
 window.addEventListener("beforeunload", () => {
   clearCountdownTimer();
+  if (noticeTimer !== null) window.clearTimeout(noticeTimer);
   stopSpeech();
 });
