@@ -203,6 +203,30 @@ button.primary {
 .feedback.error { color: #ff8195; }
 .feedback.success { color: #6ce7bd; }
 
+.game-notice {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  z-index: 60;
+  max-width: min(520px, calc(100vw - 2rem));
+  padding: .65rem .9rem;
+  border: 1px solid rgba(113,215,255,.24);
+  border-radius: 10px;
+  background: rgba(9,18,32,.96);
+  color: #dff7ff;
+  box-shadow: 0 14px 36px rgba(0,0,0,.34);
+  font-size: .76rem;
+  font-weight: 750;
+  opacity: 0;
+  transform: translate(-50%, -8px);
+  pointer-events: none;
+  transition: opacity .16s ease, transform .16s ease;
+}
+.game-notice.visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
 .shortcut-bar {
   min-height: 42px;
   display: flex;
@@ -285,7 +309,7 @@ textarea {
   letter-spacing: .05em;
 }
 .vocab-table td { padding: .35rem; border-top: 1px solid rgba(255,255,255,.04); }
-.vocab-table input, .settings-grid input, .settings-grid select {
+.vocab-table input, .class-source-panel select, .settings-grid input, .settings-grid select {
   width: 100%;
   border: 1px solid rgba(255,255,255,.08);
   border-radius: 8px;
@@ -294,7 +318,7 @@ textarea {
   padding: .5rem .58rem;
 }
 .vocab-table input { border-color: transparent; background: rgba(255,255,255,.03); }
-.vocab-table input:focus, .settings-grid input:focus, .settings-grid select:focus, textarea:focus {
+.vocab-table input:focus, .class-source-panel select:focus, .settings-grid input:focus, .settings-grid select:focus, textarea:focus {
   outline: 0;
   border-color: rgba(113,215,255,.35);
 }
@@ -462,6 +486,11 @@ textarea {
   color: #8ea2bc;
   font-size: .72rem;
   white-space: nowrap;
+}
+.class-source-panel button:disabled {
+  opacity: .62;
+  cursor: wait;
+  transform: none;
 }
 @media (max-width: 720px) {
   .class-source-panel {
