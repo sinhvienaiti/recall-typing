@@ -10,7 +10,8 @@ function preferredVoice(lang: string): SpeechSynthesisVoice | null {
 
 export function speakEnglish(text: string, settings: RecallSettings): void {
   if (!("speechSynthesis" in window)) return;
-  speechSynthesis.cancel();
+  // Keep the current utterance alive and queue this one behind it. Cancelling
+  // immediately before speak() can make rapid consecutive words disappear.
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = settings.accent;
   utterance.rate = settings.speechRate;
