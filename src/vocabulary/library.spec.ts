@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   clearVocabularyLevelCache,
   loadVocabularyGrammarModule,
+  loadVocabularyKeys,
   loadVocabularyPosCategory,
   loadVocabularySourceSettings,
   loadVocabularyTopic,
@@ -27,8 +28,19 @@ function installVocabularyFetch(): ReturnType<typeof vi.fn> {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     const json =
-      url.endsWith("/levels/001.json")
+      url.endsWith("/lookup.json")
         ? {
+            version: 1,
+            totalEntries: 4,
+            entries: {
+              apple: 1,
+              today: 1,
+              banana: 2,
+              work: 2,
+            },
+          }
+        : url.endsWith("/levels/001.json")
+          ? {
             version: 1,
             level: 1,
             entries: [
@@ -211,6 +223,30 @@ describe("shared curriculum vocabulary sources", () => {
     );
 
     expect(entries.map((entry) => entry.en)).toEqual(["today", "work"]);
+  });
+
+  it("resolves an ordered Smart Review vocabulary subset through the shared lookup", async () => {
+    const fetchMock = installVocabularyFetch();
+
+    const entries = await loadVocabularyKeys(
+      ["work", "apple"],
+      vocabularyIndex,
+    );
+
+    expect(entries.map((entry) => entry.en)).toEqual(["work", "apple"]);
+    const urls = fetchMock.mock.calls.map(([input]) => String(input));
+    expect(urls.filter((url) => url.endsWith("/lookup.json"))).toHaveLength(1);
+    expect(urls.some((url) => url.endsWith("/levels/001.json"))).toBe(true);
+    expect(urls.some((url) => url.endsWith("/levels/002.json"))).toBe(true);
+    expect(urls.some((url) => url.endsWith("/levels/003.json"))).toBe(false);
+  });
+
+  it("fails closed when a requested review key is absent from the shared lookup", async () => {
+    installVocabularyFetch();
+
+    await expect(
+      loadVocabularyKeys(["apple", "missing"], vocabularyIndex),
+    ).rejects.toThrow("missing");
   });
 
   it("restores curriculum source settings while keeping safe defaults", () => {
