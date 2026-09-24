@@ -9,6 +9,17 @@ import {
 } from "./game/recall";
 import { getVocabulary, replaceVocabulary } from "./storage/db";
 import {
+  LEARNING_ATTEMPT_MESSAGE,
+  PARENT_ORIGIN,
+  REVIEW_DATASET_MESSAGE,
+  REVIEW_ERROR_MESSAGE,
+  REVIEW_READY_MESSAGE,
+  buildRecallLearningEvent,
+  parseRecallReviewDataset,
+  reviewHintMode,
+  type RecallReviewGoal,
+} from "./learning/shared";
+import {
   defaultSettings,
   loadSettings,
   normalizeSettings,
@@ -27,6 +38,7 @@ import {
   loadVocabularyGrammarIndex,
   loadVocabularyGrammarModule,
   loadVocabularyIndex,
+  loadVocabularyKeys,
   loadVocabularyLevel,
   loadVocabularyPosCategory,
   loadVocabularyPosIndex,
