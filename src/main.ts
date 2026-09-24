@@ -367,7 +367,6 @@ let countdownTimer: number | null = null;
 let countdownActive = false;
 let readyForKey = false;
 let activeReviewGoal: RecallReviewGoal | undefined;
-let activeReviewRequestId: string | undefined;
 let currentWordWrongAttempts = 0;
 let currentWordReplayUsed = false;
 let learningRequestSequence = 0;
@@ -446,7 +445,6 @@ function emitLearningEvent(
 
 function leaveReviewMode(): void {
   activeReviewGoal = undefined;
-  activeReviewRequestId = undefined;
 }
 
 function prepareRestart(): void {
@@ -662,9 +660,10 @@ function startRun(): void {
   stopSpeech();
   clearTransitionTimer();
   slots.classList.remove("word-complete", "wrong-pulse");
-  session = recallBag.take(
-    activeReviewGoal === undefined ? settings.targetCount : vocabulary.length,
-  );
+  session =
+    activeReviewGoal === undefined
+      ? recallBag.take(settings.targetCount)
+      : [...vocabulary];
   if (session.length === 0) {
     currentIndex = 0;
     running = false;
@@ -1129,6 +1128,7 @@ async function useClassSource(level: number): Promise<void> {
   try {
     const index = await ensureVocabularyIndex();
     const metadata = index.levels.find((item) => item.level === level);
+    leaveReviewMode();
     vocabulary = await loadVocabularyLevel(level, index);
     recallBag.setEntries(vocabulary);
     sourceSettings = { ...sourceSettings, mode: "class", level };
@@ -1164,6 +1164,7 @@ async function useTopicSource(topicId: string): Promise<void> {
       ensureVocabularyIndex(),
     ]);
     const metadata = topics.topics.find((item) => item.id === topicId);
+    leaveReviewMode();
     vocabulary = await loadVocabularyTopic(topicId, topics, levels);
     recallBag.setEntries(vocabulary);
     sourceSettings = { ...sourceSettings, mode: "topic", topicId };
@@ -1203,6 +1204,7 @@ async function useWordTypeSource(posId: string): Promise<void> {
     sourceSettings = { ...sourceSettings, mode: "word-type", posId };
     vocabularySourceTab = "word-type";
     saveVocabularySourceSettings(sourceSettings);
+    leaveReviewMode();
     vocabulary = entries;
     recallBag.setEntries(vocabulary);
     vocabularyDialog.close();
@@ -1241,6 +1243,7 @@ async function useGrammarSource(grammarId: string): Promise<void> {
     sourceSettings = { ...sourceSettings, mode: "grammar", grammarId };
     vocabularySourceTab = "grammar";
     saveVocabularySourceSettings(sourceSettings);
+    leaveReviewMode();
     vocabulary = entries;
     recallBag.setEntries(vocabulary);
     vocabularyDialog.close();
@@ -1400,6 +1403,7 @@ byId<HTMLButtonElement>("saveVocabulary").addEventListener("click", async () => 
 
   customVocabulary = entries;
   await replaceVocabulary(customVocabulary);
+  leaveReviewMode();
   sourceSettings = { ...sourceSettings, mode: "custom" };
   vocabularySourceTab = "custom";
   saveVocabularySourceSettings(sourceSettings);
