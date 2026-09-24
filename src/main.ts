@@ -1503,6 +1503,66 @@ byId<HTMLInputElement>("importBackup").addEventListener("change", async (event) 
   }
 });
 
+async function applyRecallReviewDataset(
+  data: unknown,
+): Promise<void> {
+  const dataset = parseRecallReviewDataset(data);
+  if (dataset === null) return;
+
+  try {
+    const entries = await loadVocabularyKeys(
+      dataset.entityIds,
+      libraryIndex ?? undefined,
+    );
+    if (entries.length !== dataset.entityIds.length) {
+      throw new Error(
+        `Shared vocabulary resolved ${entries.length}/${dataset.entityIds.length} Recall review items`,
+      );
+    }
+
+    stopSpeech();
+    clearCountdownTimer();
+    clearTransitionTimer();
+    vocabulary = entries;
+    recallBag.setEntries(entries);
+    activeReviewGoal = dataset.goal;
+
+    postParentMessage({
+      type: REVIEW_READY_MESSAGE,
+      requestId: dataset.requestId,
+      result: {
+        items: entries.length,
+        goal: dataset.goal,
+      },
+    });
+
+    showGameNotice(
+      `Smart Review ready · ${entries.length} item${entries.length === 1 ? "" : "s"} · ${dataset.goal}`,
+    );
+    beginCountdown();
+  } catch (error) {
+    leaveReviewMode();
+    postParentMessage({
+      type: REVIEW_ERROR_MESSAGE,
+      requestId: dataset.requestId,
+      message:
+        error instanceof Error ? error.message : "Recall review dataset failed",
+    });
+  }
+}
+
+window.addEventListener("message", (event: MessageEvent<unknown>) => {
+  if (event.source !== window.parent || event.origin !== PARENT_ORIGIN) return;
+  if (
+    event.data === null ||
+    typeof event.data !== "object" ||
+    (event.data as Record<string, unknown>)["type"] !== REVIEW_DATASET_MESSAGE
+  ) {
+    return;
+  }
+  void applyRecallReviewDataset(event.data);
+});
+
 function fillSettingsForm(value: RecallSettings): void {
   byId<HTMLSelectElement>("hintMode").value = value.hintMode;
   byId<HTMLSelectElement>("accent").value = value.accent;
