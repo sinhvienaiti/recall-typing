@@ -546,8 +546,10 @@ function renderHint(): void {
   }
 
   speaker.disabled = false;
-  const showText = settings.hintMode !== "audio";
-  meaning.textContent = showText ? entry.vi : "Listen and recall the English spelling";
+  const showText = effectiveHintMode() !== "audio";
+  meaning.textContent = showText
+    ? entry.vi
+    : "Listen and recall the English spelling";
   ipa.textContent = showText ? entry.ipa : "";
 }
 
@@ -616,12 +618,15 @@ function updateStats(): void {
 }
 
 function shouldAutoSpeak(): boolean {
-  return settings.autoSpeak && settings.hintMode !== "meaning";
+  if (activeReviewGoal === "listening") return true;
+  return settings.autoSpeak && effectiveHintMode() !== "meaning";
 }
 
-function speakCurrent(): void {
+function speakCurrent(explicitReplay = false): void {
   const entry = currentEntry();
-  if (entry !== null) speakEnglish(entry.en, settings);
+  if (entry === null) return;
+  if (explicitReplay) currentWordReplayUsed = true;
+  speakEnglish(entry.en, settings);
 }
 
 function activateCurrent(): void {
@@ -633,6 +638,8 @@ function activateCurrent(): void {
 
   cursor = nextRecallIndex(entry.en, 0);
   wordStartedAt = performance.now();
+  currentWordWrongAttempts = 0;
+  currentWordReplayUsed = false;
   transitioning = false;
   renderHint();
   renderSlots();
@@ -655,7 +662,9 @@ function startRun(): void {
   stopSpeech();
   clearTransitionTimer();
   slots.classList.remove("word-complete", "wrong-pulse");
-  session = recallBag.take(settings.targetCount);
+  session = recallBag.take(
+    activeReviewGoal === undefined ? settings.targetCount : vocabulary.length,
+  );
   if (session.length === 0) {
     currentIndex = 0;
     running = false;
@@ -700,6 +709,7 @@ function handleCharacter(input: string): void {
 
   if (!correctCurrentCharacter(input)) {
     wrongAttempts++;
+    currentWordWrongAttempts++;
     streak = 0;
     slots.classList.remove("wrong-pulse");
     void slots.offsetWidth;
@@ -722,9 +732,13 @@ function handleCharacter(input: string): void {
 
 function completeWord(): void {
   if (transitioning) return;
+  const entry = currentEntry();
+  if (entry === null) return;
+
   transitioning = true;
   const now = performance.now();
   wordTimeTotal += Math.max(0, (now - wordStartedAt) / 1000);
+  emitLearningEvent(entry, now);
   completedWords++;
   streak++;
   maxStreak = Math.max(maxStreak, streak);
@@ -830,7 +844,7 @@ window.addEventListener("keydown", (event) => {
 
   if (event.key === "F2") {
     event.preventDefault();
-    speakCurrent();
+    speakCurrent(true);
     return;
   }
 
@@ -841,7 +855,9 @@ window.addEventListener("keydown", (event) => {
 byId<HTMLButtonElement>("startButton").addEventListener("click", beginCountdown);
 byId<HTMLButtonElement>("resultRestart").addEventListener("click", beginCountdown);
 byId<HTMLButtonElement>("closeResult").addEventListener("click", () => resultDialog.close());
-byId<HTMLButtonElement>("speakButton").addEventListener("click", speakCurrent);
+byId<HTMLButtonElement>("speakButton").addEventListener("click", () =>
+  speakCurrent(true),
+);
 
 function createVocabularyRow(entry: VocabularyEntry): HTMLTableRowElement {
   const row = document.createElement("tr");
