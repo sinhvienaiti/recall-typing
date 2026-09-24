@@ -78,6 +78,23 @@ describe("Recall shared learning contract", () => {
     });
   });
 
+  it("classifies explicit spelling review as typing activity", () => {
+    expect(
+      buildRecallLearningEvent({
+        entry: { id: "word", en: "word", vi: "từ", ipa: "/wɝːd/" },
+        wrongAttempts: 1,
+        responseMs: 100,
+        replayUsed: false,
+        hintMode: "full",
+        reviewGoal: "spelling",
+      }),
+    ).toMatchObject({
+      activityType: "typing",
+      result: "wrong",
+      errorType: "spelling",
+    });
+  });
+
   it("classifies audio-only normal runs as listening without requiring review mode", () => {
     expect(
       buildRecallLearningEvent({
