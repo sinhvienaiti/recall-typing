@@ -25,7 +25,7 @@ export type RecallLearningEvent = {
   entityType: "vocabulary";
   entityId: string;
   gameId: "recall-typing";
-  activityType: "recall" | "listen";
+  activityType: "typing" | "recall" | "listen";
   result: "correct" | "wrong";
   occurredAt: string;
   responseMs: number;
@@ -131,13 +131,19 @@ export function buildRecallLearningEvent(options: {
   const wrong = options.wrongAttempts > 0;
   const listening =
     options.reviewGoal === "listening" || options.hintMode === "audio";
+  const activityType =
+    options.reviewGoal === "spelling"
+      ? "typing"
+      : listening
+        ? "listen"
+        : "recall";
 
   return {
     version: 1,
     entityType: "vocabulary",
     entityId: normalizeEntityId(options.entry.en),
     gameId: "recall-typing",
-    activityType: listening ? "listen" : "recall",
+    activityType,
     result: wrong ? "wrong" : "correct",
     occurredAt: options.occurredAt ?? new Date().toISOString(),
     responseMs: Math.max(0, Math.round(options.responseMs)),
