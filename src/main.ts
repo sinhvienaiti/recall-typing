@@ -366,6 +366,11 @@ let transitionTimer: number | null = null;
 let countdownTimer: number | null = null;
 let countdownActive = false;
 let readyForKey = false;
+let activeReviewGoal: RecallReviewGoal | undefined;
+let activeReviewRequestId: string | undefined;
+let currentWordWrongAttempts = 0;
+let currentWordReplayUsed = false;
+let learningRequestSequence = 0;
 
 function clearTransitionTimer(): void {
   if (transitionTimer === null) return;
@@ -405,6 +410,43 @@ function showGameNotice(message: string): void {
     notice.classList.remove("visible");
     noticeTimer = null;
   }, 2600);
+}
+
+function effectiveHintMode(): RecallSettings["hintMode"] {
+  return activeReviewGoal === undefined
+    ? settings.hintMode
+    : reviewHintMode(activeReviewGoal, settings.hintMode);
+}
+
+function postParentMessage(message: unknown): void {
+  if (window.parent === window) return;
+  window.parent.postMessage(message, PARENT_ORIGIN);
+}
+
+function emitLearningEvent(
+  entry: VocabularyEntry,
+  completedAt: number,
+): void {
+  learningRequestSequence++;
+  postParentMessage({
+    type: LEARNING_ATTEMPT_MESSAGE,
+    requestId: `recall-typing-${Date.now().toString(36)}-${learningRequestSequence.toString(36)}`,
+    event: buildRecallLearningEvent({
+      entry,
+      wrongAttempts: currentWordWrongAttempts,
+      responseMs: Math.max(0, completedAt - wordStartedAt),
+      replayUsed: currentWordReplayUsed,
+      hintMode: effectiveHintMode(),
+      ...(activeReviewGoal === undefined
+        ? {}
+        : { reviewGoal: activeReviewGoal }),
+    }),
+  });
+}
+
+function leaveReviewMode(): void {
+  activeReviewGoal = undefined;
+  activeReviewRequestId = undefined;
 }
 
 function prepareRestart(): void {
