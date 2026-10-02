@@ -9,13 +9,16 @@ import {
 } from "./game/recall";
 import { getVocabulary, replaceVocabulary } from "./storage/db";
 import {
+  ENGLISH_ACTIVITY_DATASET_MESSAGE,
   LEARNING_ATTEMPT_MESSAGE,
   PARENT_ORIGIN,
   REVIEW_DATASET_MESSAGE,
   REVIEW_ERROR_MESSAGE,
   REVIEW_READY_MESSAGE,
   buildRecallLearningEvent,
+  parseRecallEnglishActivityDataset,
   parseRecallReviewDataset,
+  recallEnglishActivityEntries,
   reviewHintMode,
   type RecallReviewGoal,
 } from "./learning/shared";
@@ -1551,16 +1554,59 @@ async function applyRecallReviewDataset(
   }
 }
 
+async function applyRecallEnglishActivityDataset(
+  data: unknown,
+): Promise<void> {
+  const dataset = parseRecallEnglishActivityDataset(data);
+  if (dataset === null) return;
+  try {
+    const entries = recallEnglishActivityEntries(dataset);
+    stopSpeech();
+    clearCountdownTimer();
+    clearTransitionTimer();
+    vocabulary = entries;
+    recallBag.setEntries(entries);
+    activeReviewGoal = dataset.activity === "listening-typing" ? "listening" : "mixed";
+    postParentMessage({
+      type: REVIEW_READY_MESSAGE,
+      requestId: dataset.requestId,
+      result: {
+        items: entries.length,
+        activity: dataset.activity,
+        richContent: true,
+      },
+    });
+    showGameNotice(
+      `English practice ready · ${entries.length} item${entries.length === 1 ? "" : "s"} · ${dataset.activity}`,
+    );
+    beginCountdown();
+  } catch (error) {
+    leaveReviewMode();
+    postParentMessage({
+      type: REVIEW_ERROR_MESSAGE,
+      requestId:
+        data !== null &&
+        typeof data === "object" &&
+        typeof (data as Record<string, unknown>)["requestId"] === "string"
+          ? String((data as Record<string, unknown>)["requestId"]).slice(0, 100)
+          : "invalid",
+      message:
+        error instanceof Error ? error.message : "Recall English activity failed",
+    });
+  }
+}
+
 window.addEventListener("message", (event: MessageEvent<unknown>) => {
   if (event.source !== window.parent || event.origin !== PARENT_ORIGIN) return;
-  if (
-    event.data === null ||
-    typeof event.data !== "object" ||
-    (event.data as Record<string, unknown>)["type"] !== REVIEW_DATASET_MESSAGE
-  ) {
+  if (event.data === null || typeof event.data !== "object") return;
+  const type = (event.data as Record<string, unknown>)["type"];
+  if (type === REVIEW_DATASET_MESSAGE) {
+    void applyRecallReviewDataset(event.data);
     return;
   }
-  void applyRecallReviewDataset(event.data);
+  if (type === ENGLISH_ACTIVITY_DATASET_MESSAGE) {
+    void applyRecallEnglishActivityDataset(event.data);
+  }
 });
 
 function fillSettingsForm(value: RecallSettings): void {
