@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildRecallLearningEvent,
+  parseRecallEnglishActivityDataset,
   parseRecallReviewDataset,
+  recallEnglishActivityEntries,
   reviewHintMode,
 } from "./shared";
 
@@ -108,6 +110,41 @@ describe("Recall shared learning contract", () => {
       activityType: "listen",
       result: "correct",
       replayUsed: false,
+    });
+  });
+  it("keeps rich phrase mastery on the stable sentence content id", () => {
+    const dataset = parseRecallEnglishActivityDataset({
+      version: 1,
+      type: "typing-game:english-content:v1:activity-dataset",
+      requestId: "recall-rich-1",
+      gameId: "recall-typing",
+      activity: "collocation",
+      items: [{
+        contentId: "col.make-decision",
+        entityType: "sentence",
+        entityId: "col.make-decision",
+        promptText: "đưa ra quyết định",
+        answerText: "make a decision",
+        meaningVi: "đưa ra quyết định",
+      }],
+    });
+    expect(dataset).not.toBeNull();
+    const entry = recallEnglishActivityEntries(dataset!)[0]!;
+    expect(entry.en).toBe("make a decision");
+    expect(
+      buildRecallLearningEvent({
+        entry,
+        wrongAttempts: 0,
+        responseMs: 900,
+        replayUsed: false,
+        hintMode: "meaning",
+        occurredAt: "2026-10-03T00:00:00.000Z",
+      }),
+    ).toMatchObject({
+      entityType: "sentence",
+      entityId: "col.make-decision",
+      activityType: "collocation",
+      result: "correct",
     });
   });
 });
